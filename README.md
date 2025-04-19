@@ -1,4 +1,4 @@
-# Advanced Econometrics II �📈
+# Advanced Econometrics II 📈
 
 *A Graduate-Level Toolkit for Structural Estimation and Causal Inference*
 
