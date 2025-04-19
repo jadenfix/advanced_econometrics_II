@@ -1,0 +1,179 @@
+---
+title: "Homework 4"
+author: "JF"
+date: "2025-02-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+1.)
+```{r}
+library(AER)  # For Tobit regression
+library(readxl)
+
+# Load Data
+testscr <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/testscr.xlsx")
+
+# OLS Regression
+ols_model <- lm(apt ~ read + math + prog, data = testscr)
+summary(ols_model)
+
+# Tobit Regression (Censoring at 800)
+tobit_model <- tobit(apt ~ read + math + prog, left = 0, right = 800, data = testscr)
+summary(tobit_model)
+
+# Compare Coefficients
+coef_comparison <- data.frame(OLS = coef(ols_model), Tobit = coef(tobit_model))
+print(coef_comparison)
+```
+Comparing the Two Models
+	•	The Tobit model adjusts for the fact that some students reach the maximum score of 800 (censoring), whereas OLS treats these as regular observations, potentially leading to underestimated relationships.
+	•	The math and reading coefficients are slightly higher in the Tobit model, which makes sense—once we account for censoring, the impact of these variables on aptitude appears stronger.
+	•	The vocational program coefficient is negative, indicating that students in vocational tracks tend to have lower aptitude scores compared to those in general or academic programs.
+
+Why is Tobit More Reliable?
+	•	OLS assumes that aptitude scores can exceed 800, even though that isn’t possible.
+	•	Tobit corrects for this by modeling the latent variable, providing a more realistic estimate of how reading, math, and program type impact aptitude.
+	•	With 17 students reaching the 800 limit, OLS likely biases results downward by failing to recognize this upper boundary.
+
+2.)
+```{r}
+library(sampleSelection)
+
+# Load Data
+earndata <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/earndata.xlsx")
+
+# (a) OLS Regression
+ols_model <- lm(wearnl ~ educ + age, data = earndata)
+summary(ols_model)
+
+# (b) Heckman First Stage: Probit Model
+heckman_probit <- glm(observed_index ~ z, family = binomial(link = "probit"), data = earndata)
+summary(heckman_probit)
+
+# Compute Inverse Mills Ratio (IMR)
+earndata$IMR <- dnorm(predict(heckman_probit, type = "link")) / pnorm(predict(heckman_probit, type = "link"))
+
+# (c) Heckman Second Stage
+heckman_2step <- lm(wearnl ~ educ + age + IMR, data = earndata)
+summary(heckman_2step)
+
+# (d) Heckman MLE
+heckman_mle <- selection(selection = observed_index ~ z, outcome = wearnl ~ educ + age, data = earndata)
+summary(heckman_mle)
+```
+Does Selection Bias Matter in This Data?
+	•	The Inverse Mills Ratio (IMR) in the two-step Heckman model is not statistically significant (p = 0.677).
+	•	Likewise, in the Maximum Likelihood (MLE) version, the selection term (ρ) is also insignificant (p = 0.672).
+	•	These results indicate that selection bias is minimal in the earnings data.
+
+What Does This Mean?
+	•	Since selection bias is weak, the OLS regression remains a reliable method for estimating the impact of education and age on earnings.
+	•	There is no strong justification for using the Heckman correction, as employment selection does not significantly distort the relationship between education, age, and earnings.
+
+3.)
+```{r}
+library(readxl)
+
+# Load Data
+pntspread <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/pntspread.xlsx")
+
+# (a) Linear Probability Model (LPM)
+lpm_model <- lm(favwin ~ spread, data = pntspread)
+summary(lpm_model)
+
+# Test H0: intercept (win probability at spread=0) equals 0.5
+t_stat <- (coef(lpm_model)[1] - 0.5) / summary(lpm_model)$coefficients[1,2]
+p_value <- 2 * pt(abs(t_stat), df = nrow(pntspread) - 2, lower.tail = FALSE)
+print(p_value)
+
+# (b) Estimated probability at Spread = 10 (LPM)
+prob_lpm <- coef(lpm_model)[1] + coef(lpm_model)[2] * 10
+print(prob_lpm)
+
+# (c) Probit Model
+probit_model <- glm(favwin ~ spread, family = binomial(link = "probit"), data = pntspread)
+summary(probit_model)
+
+# (d) Probit probability at Spread = 10
+prob_probit <- pnorm(coef(probit_model)[1] + coef(probit_model)[2] * 10)
+print(prob_probit)
+
+# (e) Logit Model
+logit_model <- glm(favwin ~ spread, family = binomial(link = "logit"), data = pntspread)
+summary(logit_model)
+
+# (f) Logit probability at Spread = 10
+prob_logit <- exp(coef(logit_model)[1] + coef(logit_model)[2] * 10) / 
+              (1 + exp(coef(logit_model)[1] + coef(logit_model)[2] * 10))
+print(prob_logit)
+# (g) odds ratio 
+odds_ratio <- exp(coef(logit_model)[2] * 10)
+print(odds_ratio)
+# (h) mcfaddens pseudo r^2
+library(pscl)
+pseudo_r2_probit <- pR2(probit_model)
+pseudo_r2_logit <- pR2(logit_model)
+print(pseudo_r2_probit)
+print(pseudo_r2_logit)
+# (f) underdog prediction accuracy:
+pred_prob_logit <- predict(logit_model, type = "response")
+predicted_underdog <- ifelse(pred_prob_logit < 0.75, 1, 0)
+actual_underdog <- ifelse(pntspread$favwin == 0, 1, 0)
+accuracy_logit <- mean(predicted_underdog == actual_underdog)
+print(accuracy_logit)
+```
+3a.)
+(a) Is a 50% Win Rate a Good Baseline for Favorites?
+	•	The intercept (0.577) in the Linear Probability Model (LPM) suggests that when the spread is 0, the favorite wins 57.7% of the time—which is higher than the assumed 50% chance.
+	•	The p-value for this test (0.0066) is statistically significant, meaning we reject the null hypothesis that favorites win exactly 50% of the time in even matchups.
+(b) How Likely is a Favorite to Win with a 10-Point Spread?
+	•	LPM predicts a 77.1% win probability when the spread is 10 points.
+	•	The Probit and Logit models estimate slightly higher probabilities (82.0% and 82.7%, respectively), suggesting they may handle extreme values more effectively.
+	g) How Much Does a 10-Point Spread Affect the Odds?
+	•	The odds ratio is 4.97, meaning a 10-point spread makes the favorite almost five times more likely to win compared to an even matchup.
+
+(h) Which Model Provides the Best Fit?
+	•	Both Probit and Logit have a pseudo- R^2  of approximately 0.13, meaning they fit the data equally well.
+	•	While none of these models perfectly predict outcomes, they do a reasonable job capturing the relationship between point spreads and win probabilities.
+
+(i) Can These Models Predict Underdog Wins?
+	•	Using a 75% probability threshold, the models correctly predict underdog wins between 42% and 49% of the time.
+	•	The logit model performs best, correctly predicting 49% of underdog wins—not perfect, but better than random guessing.
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+

@@ -1,0 +1,310 @@
+---
+title: "Assignment-7"
+author: "Jaden Fix"
+date: "2025-03-03"
+output: html_document
+---
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Required Libraries
+```{r,echo=FALSE}
+rm(list = ls())
+library(mlogit)
+library(readxl)
+library(dplyr)
+library(lmtest)
+library(tidyr)
+```
+
+A
+```{r,echo=FALSE}
+camp = read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/campingdemand.xlsx")
+
+camp$visit = as.numeric(camp$visit)
+
+campdfidx = dfidx(camp, choice = "visit", idx = c("camper_id","park_id"))
+
+mnl = mlogit(visit ~ cost + time + mountain | 0, data = campdfidx)
+summary(mnl)
+```
+The model shows that both cost and travel time significantly reduce a camper’s probability of choosing a park. Specifically, a one‐dollar increase in cost is associated with a roughly 1.48 percentage point decline in the probability of selection, and each additional minute of travel time lowers the probability by about 0.16 percentage points. The mountain indicator has a coefficient of –0.331 (p = 0.0599), suggesting that, if a park is in the mountains, its likelihood of being chosen is slightly lower, though the effect is only marginally significant.
+
+B
+```{r,echo=FALSE}
+# Define nests based on the mountain indicator:
+mountain_alts <- unique(camp$park_id[camp$mountain == 1])
+beach_alts    <- unique(camp$park_id[camp$mountain == 0])
+nests_list    <- list(mountain = mountain_alts, beach = beach_alts)
+
+# Estimate the nested logit model using the same utility specification.
+nested_model <- mlogit(visit ~ cost + time + mountain | 0, 
+                       data = campdfidx, 
+                       nests = nests_list)
+summary(nested_model)
+```
+The nested logit results indicate that both cost and travel time continue to significantly reduce the probability of selecting a park, with cost at –0.00607 and time at –0.00147 (both p < 0.001). Compared to the simple multinomial logit, these coefficients are smaller in absolute value. The mountain indicator now has a significant negative effect (–0.19944, p = 0.0428), meaning that, all else equal, parks in the mountains are less attractive. In addition, the nest-specific parameters—0.27207 for mountain parks and 0.31647 for beach parks—are highly significant (p < 0.001), supporting the use of the nested structure.
+ 
+C
+```{r,echo=FALSE}
+# Conduct a likelihood ratio test comparing the restricted (mnl) and full (nested_model) models.
+lr_result <- lrtest(mnl, nested_model)
+
+# Print the test result (includes LR statistic, degrees of freedom, and p-value)
+print(lr_result)
+
+# Alternatively, calculate manually:
+LL_mnl <- logLik(mnl)
+LL_nested <- logLik(nested_model)
+LR_stat <- 2 * (LL_nested - LL_mnl)   # Likelihood ratio statistic
+df <- 2  # Number of restrictions (iv:mountain and iv:beach)
+p_value <- 1 - pchisq(as.numeric(LR_stat), df)
+
+cat("Likelihood Ratio Statistic:", LR_stat, "\n")
+cat("Degrees of Freedom:", df, "\n")
+cat("p-value:", p_value, "\n")
+```
+The likelihood ratio test produces a statistic of 46.56 with 2 degrees of freedom (p ≈ 7.74e-11), which leads us to strongly reject the null hypothesis. This indicates that the nested logit model—with its additional nest-specific parameters—provides a significantly better fit than the standard multinomial logit model.
+
+
+D
+```{r,echo=FALSE}
+# Extract coefficients from the nested model
+coef_nested <- coef(nested_model)
+
+# Compute the value of an extra minute of travel time: 
+# MRS_time = - (β_time / β_cost)
+# Multiply by 60 to convert minutes to dollars per hour.
+value_per_hour <- (-coef_nested["time"] / -coef_nested["cost"]) * 60
+
+# Compute the value of camping in the mountains relative to the beach:
+# MRS_mountain = - (β_mountain / β_cost)
+value_mountain <- -coef_nested["mountain"] / -coef_nested["cost"]
+
+cat("Dollar value per extra hour of travel time: $", round(value_per_hour, 2), "\n")
+cat("Dollar value of camping in the mountains (relative to the beach): $", round(value_mountain, 2), "\n")
+```
+
+E
+```{r,echo=FALSE}
+# -----------------------------
+# 1) Baseline probabilities
+# -----------------------------
+prob_baseline <- predict(nested_model, newdata = campdfidx, type = "probabilities")
+
+# -----------------------------
+# 2) Construct a counterfactual
+#    dataset with cost(Mt. Greylock)
+#    increased by $1
+# -----------------------------
+camp_fd <- camp %>%
+  mutate(cost = ifelse(park_id == 1, cost + 1, cost))
+
+campdfidx_fd <- dfidx(camp_fd, choice = "visit", idx = c("camper_id", "park_id"))
+
+# -----------------------------
+# 3) Predicted probabilities
+#    under the +$1 scenario
+# -----------------------------
+prob_fd <- predict(nested_model, newdata = campdfidx_fd, type = "probabilities")
+
+# We now have two (camper x park) matrices of probabilities:
+#   prob_baseline  and  prob_fd
+#
+# The difference (prob_fd - prob_baseline) ~ dP/dC * (1 dollar)
+
+# -----------------------------
+# 4) Calculate partial derivatives:
+#    dP_ij / dC_1  ~=  [prob_fd - prob_baseline] / 1
+# -----------------------------
+dP <- (prob_fd - prob_baseline)
+
+# -----------------------------
+# 5) Compute elasticity:
+#    E_ij = (dP_ij/dC_1) * (Cost_1 / P_ij)
+# -----------------------------
+# First pull out each camper’s cost of park_id==1 (Mt. Greylock) in baseline
+# so that cost_1[i] is the cost for camper i to go to park 1. Then we replicate 
+# it across columns so it matches the shape of the probability matrix.
+
+# Vector of cost to Mt. Greylock for each camper i in the baseline data:
+cost_mt_gry <- camp %>%
+  filter(park_id == 1) %>%
+  arrange(camper_id) %>%  # Ensure it's in camper_id order
+  pull(cost)
+
+# prob_baseline is a matrix with 1000 rows (one per camper) and 5 columns (one per park).
+# We want to replicate 'cost_mt_gry' across the 5 columns.
+cost_1_mat <- matrix(cost_mt_gry, nrow = 1000, ncol = 5, byrow = FALSE)
+
+# elasticity_ij = dP_ij * (cost_1 / P_ij)
+elasticity_matrix <- (dP / prob_baseline) * cost_1_mat
+
+# -----------------------------
+# 6) Extract the means for own- and cross-price elasticities
+# -----------------------------
+# Suppose your 5 parks are columns 1..5 in prob_baseline
+# and park_id==1 (Mount Greylock) is column 1.
+
+# a) Own-price elasticity (Mt. Greylock):
+own_elast <- elasticity_matrix[,1]
+mean_own <- mean(own_elast, na.rm = TRUE)
+
+# b) Cross elasticity for other mountain parks
+#    Suppose there's exactly 1 *other* mountain park in column 2
+cross_mtn_elast <- elasticity_matrix[,2]
+mean_cross_mtn <- mean(cross_mtn_elast, na.rm = TRUE)
+
+# c) Cross elasticity for beach parks
+#    Suppose beach parks are columns 3:5
+cross_beach_elast <- rowMeans(elasticity_matrix[,3:5], na.rm = TRUE)
+mean_cross_beach <- mean(cross_beach_elast, na.rm = TRUE)
+
+cat("Mean own-price elasticity (Mount Greylock) =", round(mean_own, 3), "\n")
+cat("Mean cross elasticity (other mountain park) =", round(mean_cross_mtn, 3), "\n")
+cat("Mean cross elasticity (beach parks)         =", round(mean_cross_beach, 3), "\n")
+```
+
+# Question 1 (f)
+```{r,echo=FALSE}
+set.seed(500)
+mixed_model <- mlogit(visit ~ cost + time + mountain | 0, 
+                      data = campdfidx, 
+                      rpar = c(time = "n", mountain = "n"), 
+                      R = 100, 
+                      halton = NA)
+summary(mixed_model)
+```
+
+G
+```{r,echo=FALSE}
+coefs <- coef(mixed_model)
+
+# Fixed cost coefficient
+beta_cost <- coefs["cost"]
+
+# Mean estimates for the random parameters
+beta_time_mean    <- coefs["time"]
+beta_mountain_mean <- coefs["mountain"]
+
+# Standard deviations for the random parameters (names depend on the mlogit output)
+sd_time    <- coefs["sd.time"]
+sd_mountain <- coefs["sd.mountain"]
+
+# Set up simulation (10,000 draws)
+set.seed(123)  # For reproducibility
+R <- 10000
+beta_time_draws    <- rnorm(R, mean = beta_time_mean,    sd = sd_time)
+beta_mountain_draws <- rnorm(R, mean = beta_mountain_mean, sd = sd_mountain)
+
+# Compute the willingness-to-pay (WTP) measures:
+# Value of one extra minute of travel is: - (β_time / β_cost)
+# Multiply by 60 to convert to per hour.
+value_time_draws    <- - (beta_time_draws / beta_cost) * 60  
+# Value of camping in the mountains (relative to the beach):
+value_mountain_draws <- - (beta_mountain_draws / beta_cost)
+
+# Summarize the distributions
+mean_value_time    <- mean(value_time_draws)
+sd_value_time      <- sd(value_time_draws)
+mean_value_mountain <- mean(value_mountain_draws)
+sd_value_mountain   <- sd(value_mountain_draws)
+
+# Print the results
+cat("Dollar value per extra hour of travel time (mean, sd): $", 
+    round(mean_value_time, 2), ",", round(sd_value_time, 2), "\n")
+cat("Dollar value for camping in the mountains relative to the beach (mean, sd): $", 
+    round(mean_value_mountain, 2), ",", round(sd_value_mountain, 2), "\n")
+```
+
+H
+```{r,echo=FALSE}
+# Assuming from part (g) you have:
+#   beta_cost, beta_mountain_draws, and value_mountain_draws
+# where:
+#   value_mountain_draws = - (beta_mountain_draws / beta_cost)
+
+# Calculate the proportion of campers with a positive value for camping in the mountains.
+prop_positive <- mean(value_mountain_draws > 0)
+
+# Print the result
+cat("Proportion with positive value for camping in the mountains (relative to beach):",
+    round(prop_positive, 4), "\n")
+```
+
+I
+```{r,echo=FALSE}
+# Create counterfactual data: increase cost by $20 for Mount Greylock (park_id == 1)
+camp_counter <- camp %>%
+  mutate(cost = ifelse(park_id == 1, cost + 20, cost))
+
+# Convert the counterfactual data to dfidx format (same indexing as before)
+campdfidx_counter <- dfidx(camp_counter, choice = "visit", idx = c("camper_id", "park_id"))
+
+# Obtain predicted probabilities (assumed to be on a per-camper basis; rows = campers, columns = parks)
+prob_original <- predict(mixed_model, newdata = campdfidx, type = "probabilities")
+prob_counter  <- predict(mixed_model, newdata = campdfidx_counter, type = "probabilities")
+
+# Aggregate predicted probabilities to get the expected number of campers for each park.
+# (Assuming 1000 campers, so summing over rows gives the expected count.)
+agg_original <- colSums(prob_original)
+agg_counter  <- colSums(prob_counter)
+
+# Compute differences in expected counts
+diff_counts <- agg_counter - agg_original
+
+# Display the changes:
+cat("Expected change in number of campers per park:\n")
+print(diff_counts)
+
+# Specifically:
+cat("\nFewer campers at Mount Greylock (park 1):", round(diff_counts[1], 2), "\n")
+cat("Additional campers at the other parks (parks 2-5):\n")
+print(round(diff_counts[2:5], 2))
+```
+
+J
+```{r,echo=FALSE}
+# Extract mean parameter estimates from the mixed logit model:
+coefs_mixed <- coef(mixed_model)
+beta_cost     <- coefs_mixed["cost"]
+beta_time     <- coefs_mixed["time"]
+beta_mountain <- coefs_mixed["mountain"]
+
+# Compute representative utility for each camper-alternative in the observed data:
+# V_obs = beta_cost * cost + beta_time * time + beta_mountain * mountain
+camp_obs <- camp %>%
+  mutate(V_obs = beta_cost * cost + beta_time * time + beta_mountain * mountain)
+
+# For each camper, calculate the log-sum of utilities (observed)
+# Group by camper_id, then sum exp(V_obs) over alternatives, then take the log.
+cs_obs <- camp_obs %>%
+  group_by(camper_id) %>%
+  summarize(logsum_obs = log(sum(exp(V_obs))), .groups = "drop") %>%
+  mutate(CS_obs = - (1 / beta_cost) * logsum_obs)
+
+# Create a counterfactual version of the data where cost for park_id==1 (Mount Greylock) is increased by $20.
+camp_cf <- camp %>%
+  mutate(cost = ifelse(park_id == 1, cost + 20, cost)) %>%
+  mutate(V_cf = beta_cost * cost + beta_time * time + beta_mountain * mountain)
+
+# Calculate log-sum and consumer surplus for counterfactual:
+cs_cf <- camp_cf %>%
+  group_by(camper_id) %>%
+  summarize(logsum_cf = log(sum(exp(V_cf))), .groups = "drop") %>%
+  mutate(CS_cf = - (1 / beta_cost) * logsum_cf)
+
+# Merge the observed and counterfactual consumer surplus by camper_id:
+cs_change <- left_join(cs_obs, cs_cf, by = "camper_id") %>%
+  mutate(change_CS = CS_cf - CS_obs)
+
+# Aggregate results over all 1000 campers:
+mean_change_CS <- mean(cs_change$change_CS, na.rm = TRUE)
+total_change_CS <- sum(cs_change$change_CS, na.rm = TRUE)
+
+cat("Mean change in consumer surplus per camper: $", round(mean_change_CS, 2), "\n")
+cat("Total change in consumer surplus for 1000 campers: $", round(total_change_CS, 2), "\n")
+```
+

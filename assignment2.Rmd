@@ -1,0 +1,203 @@
+---
+title: "Homework2"
+author: "JF"
+date: "2025-01-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Problem 1
+```{r}
+set.seed(123)
+N <- 100000
+n_people <- 80
+shared_birthdays <- function(n) { 
+  birthdays <- sample(1:365,n,replace=TRUE)
+  sum(duplicated(birthdays))}
+#simulated
+results <- replicate(N,shared_birthdays(n_people))
+
+pmf <- table(results)/N
+#plot 
+plot(as.numeric(names(pmf)), pmf, type = "h", lwd = 2, col = "red",
+     xlab = "Number of Shared Birthdays", ylab = "Probability",
+     main = "PMF of Shared Birthdays (80 People)")
+#prob nobody shares a bday:
+prob_no_shared <- pmf["0"]
+cat("Probability that no one shares a birthday:", prob_no_shared, "\n")
+```
+Problem 2 
+A.)
+```{r}
+# Libraries
+set.seed(123)  # For reproducibility
+library(ggplot2)  # For visualization
+
+# Parameters
+n <- 1000  # Sample size
+p1 <- 0.35  # Probability of N(0,1)
+p2 <- 0.65  # Probability of N(4,1)
+
+# Generate data
+U <- rmultinom(1, n, prob = c(p1, p2))  # Assign counts for each component
+mu1 <- 0; mu2 <- 4
+sd1 <- 1; sd2 <- 1
+
+dat1 <- c(rnorm(U[1], mean = mu1, sd = sd1),
+          rnorm(U[2], mean = mu2, sd = sd2))
+
+# Kernel Density Estimation
+kde <- density(dat1, bw = 0.3)
+
+# True Density Function
+true_density <- function(x) {
+  p1 * dnorm(x, mean = mu1, sd = sd1) + p2 * dnorm(x, mean = mu2, sd = sd2)
+}
+
+# Create plot
+x_vals <- seq(min(dat1), max(dat1), length.out = 1000)
+true_vals <- true_density(x_vals)
+
+plot(kde, col = "green", main = "KDE vs True Density", xlab = "x", ylab = "Density")
+lines(x_vals, true_vals, col = "blue", lwd = 5)
+legend("topright", legend = c("KDE (bw=0.3)", "True Density"), col = c("green", "blue"), lwd = 5)
+```
+B.)
+```{r}
+# Monte Carlo Simulation
+N <- 10000  # Number of simulations
+x_vals <- seq(min(dat1), max(dat1), length.out = 1000)  # Grid for density estimation
+
+mise_simulation <- function() {
+  # Generate new data
+  U <- rmultinom(1, n, prob = c(p1, p2))
+  dat_sim <- c(rnorm(U[1], mean = mu1, sd = sd1), rnorm(U[2], mean = mu2, sd = sd2))
+  
+  # KDE on simulated data
+  kde_sim <- density(dat_sim, bw = 0.3, n = length(x_vals), from = min(x_vals), to = max(x_vals))
+  
+  # Calculate squared error
+  sum((kde_sim$y - true_density(kde_sim$x))^2) * (diff(kde_sim$x)[1])
+}
+
+mise_results <- replicate(N, mise_simulation())
+mise_estimate <- mean(mise_results)
+cat("Estimated MISE for KDE (bw = 0.3):", mise_estimate, "\n")
+```
+C.)
+```{r}
+# Bandwidths to evaluate
+bandwidths <- seq(0.1, 0.5, by = 0.05)
+mise_by_bandwidth <- sapply(bandwidths, function(bw) {
+  # Monte Carlo Simulation for each bandwidth
+  mise_simulation_bw <- function() {
+    U <- rmultinom(1, n, prob = c(p1, p2))
+    dat_sim <- c(rnorm(U[1], mean = mu1, sd = sd1), rnorm(U[2], mean = mu2, sd = sd2))
+    kde_sim <- density(dat_sim, bw = bw, n = length(x_vals), from = min(x_vals), to = max(x_vals))
+    sum((kde_sim$y - true_density(kde_sim$x))^2) * (diff(kde_sim$x)[1])
+  }
+  mean(replicate(N, mise_simulation_bw()))
+})
+
+# Plot MISE against Bandwidth
+plot(bandwidths, mise_by_bandwidth, type = "b", col = "blue", pch = 19,
+     xlab = "Bandwidth", ylab = "MISE", main = "MISE vs Bandwidth")
+```
+3.)
+A.)
+```{r}
+library(readxl)
+library(boot)
+wage_data <- readxl::read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/wage.xlsx")
+model <- lm(wage ~ educ + exper, data = wage_data)
+summary(model)
+```
+B.)
+```{r}
+library(boot)
+
+boot_func <- function(data, indices) {
+  boot_sample <- data[indices, ]
+  coef(lm(wage ~ educ + exper, data = boot_sample))["educ"]
+}
+
+set.seed(123)
+empirical_boot <- boot(wage_data, statistic = boot_func, R = 10000)
+hist(empirical_boot$t, breaks = 100, col = "skyblue", main = "Bootstrap Distribution of Beta_1 (educ)",
+     xlab = "Beta_1 (educ)")
+```
+C.)
+```{r}
+# Standard error of \(\beta_1\) from empirical bootstrap
+empirical_se <- sd(empirical_boot$t)
+cat("Empirical Bootstrap SE for Beta_1 (educ):", empirical_se, "\n")
+```
+D.)
+```{r}
+set.seed(123)
+residuals <- residuals(model)
+fitted_values <- fitted(model)
+
+residual_bootstrap_samples <- replicate(10000, {
+  resampled_residuals <- sample(residuals, replace = TRUE)
+  new_y <- fitted_values + resampled_residuals
+  coef(lm(new_y ~ educ + exper, data = wage_data))["educ"]
+})
+
+residual_bootstrap_se <- sd(residual_bootstrap_samples)
+cat("Residual Bootstrap SE for Beta_1 (educ):", residual_bootstrap_se, "\n")
+```
+E.)
+```{r}
+set.seed(123)
+wild_bootstrap_samples <- replicate(10000, {
+  wild_weights <- sample(c(-1, 1), size = nrow(wage_data), replace = TRUE)
+  new_y <- fitted_values + wild_weights * residuals
+  coef(lm(new_y ~ educ + exper, data = wage_data))["educ"]
+})
+
+wild_bootstrap_se <- sd(wild_bootstrap_samples)
+cat("Wild Bootstrap SE for Beta_1 (educ):", wild_bootstrap_se, "\n")
+```
+5.)
+```{r}
+# Simulated data for demonstration
+set.seed(123)
+n <- 100  # Sample size
+mu <- 5   # True mean
+sigma <- 2  # True standard deviation
+
+# Generate normal data
+data <- rnorm(n, mean = mu, sd = sigma)
+
+# Method of Moments Estimates
+x_bar <- mean(data)  # Estimate for mu
+sigma_squared_hat <- mean(data^2) - x_bar^2  # Estimate for sigma^2
+
+# Display results
+cat("Method of Moments Estimate for Mu (Mean):", round(x_bar, 4), "\n")
+cat("Method of Moments Estimate for Sigma^2 (Variance):", round(sigma_squared_hat, 4), "\n")
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+

@@ -1,0 +1,275 @@
+---
+title: "homework 8"
+author: "JF"
+date: "2025-03-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+library(AER)
+library(readxl)
+library(dplyr)
+library(fixest)
+library(ggplot2)
+library(tidyverse)
+library(car)
+##########
+cars <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/cars.xlsx")
+auction1 <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/auction1.xlsx")
+auction2 <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/auction2.xlsx")
+```
+
+A.)
+
+OLS W FE
+```{r}
+cars <- cars |> 
+  group_by(year, country) |> 
+  mutate(
+    market_share = qu / marketsize,  # Normalize within country-year
+    total_inside_share = sum(market_share, na.rm = TRUE),
+    outside_option = 1 - total_inside_share  # Common outside share for all products in a market
+  ) |> 
+  ungroup()
+
+# Compute logit-transformed dependent variable
+cars <- cars |> 
+  mutate(y = log(market_share) - log(outside_option))
+
+# Convert fixed effect variables to factors
+cars <- cars |> 
+  mutate(
+    brand = as.factor(brand),
+    country = as.factor(country),
+    year = as.factor(year),
+    log_pop = log(pop),
+    log_gdp = log(ngdp)
+  )
+
+# Run OLS with Fixed Effects
+ols_model <- feols(
+  y ~ price + horsepower + fuel + width + height + weight + domestic + log_pop + log_gdp | brand + country + year, 
+  data = cars, 
+  vcov = "hc1"
+)
+
+# Show Results
+summary(ols_model)
+```
+B.)
+```{r}
+cars <- cars |> 
+  group_by(year, country) |> 
+  mutate(
+    # Compute market mean characteristic
+    mean_horsepower = mean(horsepower, na.rm = TRUE),
+    mean_fuel = mean(fuel, na.rm = TRUE),
+    mean_width = mean(width, na.rm = TRUE),
+    mean_height = mean(height, na.rm = TRUE),
+    mean_weight = mean(weight, na.rm = TRUE),
+    mean_domestic = mean(domestic, na.rm = TRUE)
+  ) |> 
+  mutate(
+    # IV1: Difference from market mean
+    iv_horsepower_1 = horsepower - mean_horsepower,
+    iv_fuel_1 = fuel - mean_fuel,
+    iv_width_1 = width - mean_width,
+    iv_height_1 = height - mean_height,
+    iv_weight_1 = weight - mean_weight,
+    iv_domestic_1 = domestic - mean_domestic,
+
+    # IV2: Squared difference from market mean
+    iv_horsepower_2 = (horsepower - mean_horsepower)^2,
+    iv_fuel_2 = (fuel - mean_fuel)^2,
+    iv_width_2 = (width - mean_width)^2,
+    iv_height_2 = (height - mean_height)^2,
+    iv_weight_2 = (weight - mean_weight)^2,
+    iv_domestic_2 = (domestic - mean_domestic)^2
+  ) |> 
+  ungroup()
+
+# Run IV regression using feols() from fixest
+iv_model <- feols(
+  y ~ horsepower + fuel + width + height + weight + domestic + log_pop + log_gdp | brand + country + year | 
+    price ~ iv_horsepower_1 + iv_horsepower_2 + iv_fuel_1 + iv_fuel_2 +
+             iv_width_1 + iv_width_2 + iv_height_1 + iv_height_2 +
+             iv_weight_1 + iv_weight_2 + iv_domestic_1 + iv_domestic_2, 
+  data = cars, 
+  vcov = "hc1"
+)
+
+# Show IV regression results
+summary(iv_model)
+```
+
+```{r}
+beta_fuel <- coef(iv_model)["fuel"]  
+beta_price <- coef(iv_model)["fit_price"]  
+# Convert price coefficient to Euros (price was in thousands of euros)  
+willingness_to_pay <- (beta_fuel / beta_price) * 1000  
+cat("Average willingness to pay for 1 liter per km improvement:", willingness_to_pay, "Euros\n")  
+## Average willingness to pay for 1 liter per km improvement: -1467.287 Euros  
+
+# Since fuel efficiency is liters per km, a decrease (improvement) is valued positively  
+# Report absolute value  
+cat("C: Average willingness to pay:", abs(willingness_to_pay), "Euros\n")  
+
+# Test equality of country-specific price coefficients  
+# Re-specify model with country-specific price interactions  
+iv_model_countries <- feols(  
+  y ~ price:country + horsepower + fuel + width + height + weight + domestic + log_pop + log_gdp |  
+  brand + country + year |  
+  price ~ iv_horsepower_1 + iv_horsepower_2 + iv_fuel_1 + iv_fuel_2 +  
+          iv_width_1 + iv_width_2 + iv_height_1 + iv_height_2 +  
+          iv_weight_1 + iv_weight_2 + iv_domestic_1 + iv_domestic_2,  
+  data = cars,  
+  vcov = "hc1"  
+)  
+
+# Wald test for equality of all country price coefficients  
+wald_test_all <- linearHypothesis(iv_model_countries,  
+                                  matchCoefs(iv_model_countries, "price:country"),  
+                                  white.adjust = "hc1")  
+# Print header first
+cat("D: Wald Test all:\n")
+
+# Print the test results
+print(wald_test_all)  
+
+# Wald test excluding UK (country5)  
+countries_to_test <- levels(cars$country)[1:4] # Assuming country5 is UK  
+wald_test_no_uk <- linearHypothesis(iv_model_countries,  
+                                   paste0("price:country", countries_to_test, " = 0"),  
+                                   white.adjust = "hc1")  
+wald_test_no_uk
+cat("D: Wald Test no UK:\n")
+print(wald_test_no_uk)
+
+# Correct elasticity calculation: alpha * price * (1 - market_share)  
+cars <- cars |>  
+  mutate(price_elasticity = coef(iv_model)["fit_price"] * price * (1 - market_share))  
+
+# Summary statistics  
+cat("E: price elasticity of demand for each product, market, and year:\n")
+print(summary(cars$price_elasticity))  
+
+```
+
+2.)
+In a first-price auction with three bidders and symmetric private values drawn from \[ F(x)=x^2,\quad x\in[0,1], \] the symmetric equilibrium bidding strategy, (b(v)), is given by \[ b(v) = v - \frac{\displaystyle \int_{0}^{v} \left(F(t)\right)^{n-1}\, dt}{\left(F(v)\right)^{n-1}}, \] where (n=3). Since \[ F(v)=v^2,\quad \text{so} \quad \left(F(v)\right)^{2} = \left(v^2\right)^2 = v^4, \] and \[ \int_0^v \left(F(t)\right)^{2}\, dt = \int_0^v (t^2)^2\, dt = \int_0^v t^4\, dt = \frac{v^5}{5}, \] substituting these expressions into the bidding strategy yields \[ b(v)= v - \frac{\frac{v^5}{5}}{v^4} = v - \frac{v}{5} = \frac{4}{5}v. \]
+
+Thus, the optimal bidding strategy is \[ b(v)=\frac{4}{5}v. \]
+
+3.)
+a.)
+```{r}
+f_sealed_2bid <- function(bids, eps=0.5){
+  values <- rep(NA, length(bids))
+  for (i in 1:length(bids)){
+    H_hat <- mean(bids < bids[i])
+    h_hat <- (mean(bids < bids[i] + eps) - mean(bids < bids[i] - eps))/(2*eps)
+    values[i] <- bids[i] + H_hat/h_hat
+  }
+  return(values)
+}
+bids <- auction1[2:3]
+bids <- as.vector(as.matrix(bids))
+values <- f_sealed_2bid(bids)
+
+dv<- density(values)
+db<- density(bids)
+plot(db,col="blue", xlim=c(-5, 15), lwd = 5)
+lines(dv,col="green", lwd= 3)
+abline(h=3)
+```
+B.)
+```{r}
+bids <- auction1[, 2:3]
+bids <- as.vector(as.matrix(bids))   
+values <- f_sealed_2bid(bids)        
+hist(bids, 
+     col = rgb(0, 0, 1, 0.5), 
+     breaks = 20, 
+     xlim = c(0,50), 
+     ylim = c(0, max(hist(bids, plot = FALSE)$counts, 
+                     hist(values, plot = FALSE)$counts)), 
+     xlab = "Bid/Value", 
+     main = "Histogram of Observed Bids and Estimated Valuations")
+
+hist(values, 
+     col = rgb(0, 1, 0, 0.5),  
+     breaks = 200, 
+     add = TRUE)               
+legend("topright", 
+       legend = c("Bids", "Estimated Valuations"), 
+       fill = c(rgb(0, 0, 1, 0.5), rgb(0, 1, 0, 0.5)), 
+       border = "black")
+```
+
+```{r}
+mean_bids <- mean(bids)
+mean_vals <- mean(values)
+med_bids <- median(bids)
+med_vals <- median(values)
+```
+C.)
+```{r}
+neg_log_likelihood <- function(params, data) {
+  mu <- params[1]  
+  s <- params[2]  
+  
+  n <- length(data)
+  log_likelihood <- -n/2 * log(2 * pi) - n * log(s) - sum((data - mu)^2) / (2 * s^2)
+  
+  return(-log_likelihood)  
+}
+
+init_params <- c(mean(values), sd(values))
+
+mle_results <- optim(init_params, neg_log_likelihood, data = values, method = "L-BFGS-B",
+                     lower = c(-Inf, 0.0001))
+mu_hat <- mle_results$par[1]
+s_hat <- mle_results$par[2]
+cat("Estimated µ (mean):", mu_hat, "\n")
+```
+
+```{r}
+cat("Estimated s (std dev):", s_hat, "\n")
+```
+4.)
+```{r}
+winning_bid <- auction2$Price
+
+# Estimate the empirical CDF of the winning bid
+G_emp <- ecdf(winning_bid)
+
+# Create a grid of bid values spanning the range of winning bids
+bid_grid <- seq(min(winning_bid), max(winning_bid), length.out = 200)
+
+# Invert the relation: F(v) = 1 - sqrt(1 - G(v))
+F_est <- 1 - sqrt(1 - G_emp(bid_grid))
+
+# Assuming bid_grid and F_est are already defined
+
+# Plot the estimated CDF
+plot(bid_grid, F_est, type = "l", lwd = 4, col = "green",
+     main = "Estimated Distribution of Valuations",
+     xlab = "Valuation",
+     ylab = "Estimated CDF")
+
+# Overlay the normal CDF with mean and standard deviation estimated from data
+mu_hat <- mean(bid_grid)  # Estimated mean
+sigma_hat <- sd(bid_grid) # Estimated standard deviation
+
+curve(pnorm(x, mean = mu_hat, sd = sigma_hat), 
+      from = min(bid_grid), to = max(bid_grid), 
+      col = "blue", lwd = 4, add = TRUE)
+
+# Add legend
+legend("bottomright", legend = c("Estimated CDF", "Normal CDF"),
+       col = c("green", "blue"), lwd = 2)
+```

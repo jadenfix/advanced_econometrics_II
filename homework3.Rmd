@@ -1,0 +1,319 @@
+---
+title: "homework3"
+author: "JF"
+date: "2025-01-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+1.)
+
+1.	Relevance: Lagged prices are correlated with current prices.
+2.	Exogeneity: Lagged prices are not directly correlated with the current demand (error term).
+
+
+2.)
+
+1.	 Z  is independent of  Y, X, W :  Z  is unrelated to the endogenous variable  X  or the dependent variable  Y .
+2.	 Z = 2 \cdot W :  Z  is linearly dependent on  W , violating exogeneity.
+
+
+```{r}
+# Load necessary libraries
+if (!require(AER)) install.packages("AER", dependencies = TRUE)
+if (!require(sandwich)) install.packages("sandwich", dependencies = TRUE)
+if (!require(lmtest)) install.packages("lmtest", dependencies = TRUE)
+
+library(AER)
+library(sandwich)
+library(lmtest)
+
+# Load the dataset
+data <- read.csv("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/HansfordGomez.csv")
+
+# Display variable names
+cat("\n====== Variable Names in Dataset ======\n")
+print(variable.names(data))
+
+# ==========================
+# (a) OLS Regression
+# ==========================
+ols_model <- lm(DemVoteShare2 ~ Turnout + Yr52 + Yr56 + Yr60 + Yr64 + Yr68 + Yr72 +
+                Yr76 + Yr80 + Yr84 + Yr88 + Yr92 + Yr96 + Yr2000, data = data)
+
+# Display OLS results
+cat("\n====== OLS Regression Results ======\n")
+summary(ols_model)
+
+# ==========================
+# (b) IV Regression (2SLS)
+# ==========================
+iv_model <- ivreg(DemVoteShare2 ~ Turnout + Yr52 + Yr56 + Yr60 + Yr64 + Yr68 + 
+                  Yr72 + Yr76 + Yr80 + Yr84 + Yr88 + Yr92 + Yr96 + Yr2000 | 
+                  DNormPrcp_KRIG + Yr52 + Yr56 + Yr60 + Yr64 + Yr68 + 
+                  Yr72 + Yr76 + Yr80 + Yr84 + Yr88 + Yr92 + Yr96 + Yr2000, 
+                  data = data)
+
+# Display IV Regression Results
+cat("\n====== 2SLS IV Regression Results ======\n")
+summary(iv_model)
+
+# ==========================
+# (c) Extract & Compare Coefficients
+# ==========================
+ols_coef <- coef(ols_model)["Turnout"]
+iv_coef <- coef(iv_model)["Turnout"]
+
+cat("\n====== Comparison of OLS vs IV Estimates ======\n")
+cat("OLS Estimate for Turnout:", ols_coef, "\n")
+cat("IV Estimate for Turnout:", iv_coef, "\n")
+
+# ==========================
+# Robust Standard Errors
+# ==========================
+cat("\n====== IV Regression with Robust Standard Errors ======\n")
+coeftest(iv_model, vcov. = vcovHC, type = "HC1")
+
+# ==========================
+# Weak Instrument Test (First-Stage F-Test)
+# ==========================
+first_stage <- lm(Turnout ~ DNormPrcp_KRIG + Yr52 + Yr56 + Yr60 + Yr64 + Yr68 + 
+                  Yr72 + Yr76 + Yr80 + Yr84 + Yr88 + Yr92 + Yr96 + Yr2000, 
+                  data = data)
+
+# Compute the First-Stage F-Statistic manually
+first_stage_F <- summary(first_stage)$fstatistic[1]  # Extract F-stat
+
+cat("\n====== Weak Instrument Test (First-Stage Regression) ======\n")
+summary(first_stage)
+
+# ==========================
+# Interpret Results Automatically
+# ==========================
+cat("\n====== Interpretation of Results ======\n")
+
+# Weak Instrument Test Interpretation
+if (!is.na(first_stage_F) && first_stage_F > 10) {
+  cat("✅ The first-stage F-statistic is", first_stage_F, 
+      ". The instrument (Rainfall) is strong (F > 10), meaning it explains enough variation in Turnout.\n")
+} else {
+  cat("⚠️ The first-stage F-statistic is", first_stage_F, 
+      ". The instrument (Rainfall) is weak (F < 10), meaning IV estimates may be biased. Consider alternative instruments.\n")
+}
+
+# OLS vs IV Comparison Interpretation
+if (abs(iv_coef) > abs(ols_coef)) {
+  cat("✅ The IV estimate is larger in magnitude than the OLS estimate, which suggests that OLS was downward biased due to endogeneity.\n")
+} else {
+  cat("⚠️ The IV estimate is smaller or similar to the OLS estimate, which may indicate weak instrumentation or incorrect instrument validity.\n")
+}
+
+# Statistical Significance Interpretation
+iv_p_value <- coeftest(iv_model, vcov. = vcovHC, type = "HC1")["Turnout", "Pr(>|t|)"]
+
+if (iv_p_value < 0.05) {
+  cat("✅ The IV coefficient on Turnout is statistically significant (p-value < 0.05), meaning there is evidence that turnout affects Democratic vote share.\n")
+} else {
+  cat("⚠️ The IV coefficient on Turnout is NOT statistically significant (p-value > 0.05), meaning the instrument may not be strong enough or there is no causal effect.\n")
+}
+```
+
+C.) This moves in the correct direction since the turnout in endogenous in the OLS model, making it so the ols bias moves the coeff downward. 
+
+Statistical signficance is present at the <0.001 level during the OLS regression but is only present at the <0.05 level when adjusting for heteroskadastcity 
+
+4.)
+```{r}
+# Load necessary libraries
+if (!require(AER)) install.packages("AER", dependencies = TRUE)
+if (!require(lmtest)) install.packages("lmtest", dependencies = TRUE)
+if (!require(sandwich)) install.packages("sandwich", dependencies = TRUE)
+if (!require(readxl)) install.packages("readxl", dependencies = TRUE)
+
+library(AER)
+library(lmtest)
+library(sandwich)
+library(readxl)
+
+# Load the dataset
+ang_data <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/ang_ev_1980.xlsx")
+
+# ==========================
+# (a) Two-Stage Least Squares (2SLS) Regression
+# ==========================
+iv_model_2sls <- ivreg(mom_weeks_worked ~ kidcount + blackm + hispm | 
+                        samesex + twins_2 + blackm + hispm, 
+                        data = ang_data)
+
+# Display IV Regression Results
+cat("\n====== 2SLS IV Regression Results ======\n")
+summary(iv_model_2sls)
+
+# Robust Standard Errors
+cat("\n====== IV Regression with Robust Standard Errors ======\n")
+coeftest(iv_model_2sls, vcov. = vcovHC, type = "HC1")
+
+# ==========================
+# (a) Weak Instrument Test (First-Stage F-Test)
+# ==========================
+first_stage <- lm(kidcount ~ samesex + twins_2 + blackm + hispm, data = ang_data)
+
+# Display First-Stage Regression Results
+cat("\n====== First-Stage Regression Results ======\n")
+summary(first_stage)
+
+# ==========================
+# (b) Overidentification Test (J-Test)
+# ==========================
+iv_residuals <- residuals(iv_model_2sls)
+overid_test <- lm(iv_residuals ~ samesex + twins_2, data = ang_data)
+J_stat <- nrow(ang_data) * summary(overid_test)$r.squared
+p_value <- 1 - pchisq(J_stat, df = 1)  # df = number of instruments - endogenous variables
+
+# Display J-Test Results
+cat("\n====== Overidentification (J-Test) Results ======\n")
+cat("J-statistic:", J_stat, "\n")
+cat("P-value:", p_value, "\n")
+
+# ==========================
+# (c) Hausman Test for Endogeneity
+# ==========================
+# Step 1: Run OLS regression
+ols_model <- lm(mom_weeks_worked ~ kidcount + blackm + hispm, data = ang_data)
+
+# Step 2: Compute residuals from the first-stage regression
+ang_data$resid_kidcount <- residuals(first_stage)
+
+# Step 3: Run Augmented OLS with First-Stage Residuals
+hausman_model <- lm(mom_weeks_worked ~ kidcount + resid_kidcount + blackm + hispm, data = ang_data)
+
+# Display Hausman Test Results
+cat("\n====== Hausman Test Results ======\n")
+summary(hausman_model)
+
+# ==========================
+# Interpret Results Automatically
+# ==========================
+cat("\n====== Interpretation of Results ======\n")
+
+# Weak Instrument Test Interpretation
+if (summary(first_stage)$fstatistic[1] > 10) {
+  cat("✅ The first-stage F-statistic is", summary(first_stage)$fstatistic[1], 
+      ". The instruments are strong (F > 10), meaning they provide enough variation in 'kidcount'.\n")
+} else {
+  cat("⚠️ The first-stage F-statistic is", summary(first_stage)$fstatistic[1], 
+      ". The instruments are weak (F < 10), meaning IV estimates may be biased. Consider alternative instruments.\n")
+}
+
+# J-Test Interpretation
+if (p_value > 0.05) {
+  cat("✅ The J-statistic is", J_stat, "with a p-value of", p_value, 
+      ". We fail to reject the null hypothesis, meaning the instruments are likely exogenous (valid).\n")
+} else {
+  cat("⚠️ The J-statistic is", J_stat, "with a p-value of", p_value, 
+      ". We reject the null hypothesis, suggesting at least one instrument is endogenous (invalid).\n")
+}
+
+# Hausman Test Interpretation
+if (summary(hausman_model)$coefficients["resid_kidcount", "Pr(>|t|)"] < 0.05) {
+  cat("⚠️ The coefficient on 'resid_kidcount' is statistically significant (p-value < 0.05).",
+      "This suggests 'kidcount' is endogenous, so IV estimation is necessary.\n")
+} else {
+  cat("✅ The coefficient on 'resid_kidcount' is not statistically significant (p-value > 0.05).",
+      "This suggests 'kidcount' is exogenous, meaning OLS is sufficient.\n")
+}
+
+```
+
+5.)
+
+## Model Definition
+We consider the regression model:
+
+\[
+y = \beta_0 + \beta_1 x + \epsilon
+\]
+
+where \( x \) is endogenous and \( z \) is a binary instrument for \( x \). The IV estimator is given by:
+
+\[
+\beta_1^{IV} = \frac{\text{Cov}(y, z)}{\text{Cov}(x, z)}
+\]
+
+For binary \( z \), the covariances are:
+
+\[
+\text{Cov}(y, z) = \frac{1}{n} \sum_{i=1}^{n} (z_i - \bar{z})(y_i - \bar{y})
+\]
+
+\[
+\text{Cov}(x, z) = \frac{1}{n} \sum_{i=1}^{n} (z_i - \bar{z})(x_i - \bar{x})
+\]
+
+Since \( z \) is binary (\( z \in \{0,1\} \)), its mean is:
+
+\[
+\bar{z} = \frac{1}{n} \sum_{i=1}^{n} z_i = \frac{n_1}{n}
+\]
+
+where \( n_1 \) is the number of observations where \( z_i = 1 \), and \( n_0 = n - n_1 \) is the number of observations where \( z_i = 0 \).
+
+### IV Estimator Formula
+By simplifying, we obtain:
+
+\[
+\beta_1^{IV} = \frac{\bar{y}_1 - \bar{y}_0}{\bar{x}_1 - \bar{x}_0}
+\]
+
+where:
+* \( \bar{y}_1, \bar{x}_1 \) are the averages of \( y \) and \( x \) when \( z = 1 \).
+* \( \bar{y}_0, \bar{x}_0 \) are the averages of \( y \) and \( x \) when \( z = 0 \).
+
+
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
