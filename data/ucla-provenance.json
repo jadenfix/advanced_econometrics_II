@@ -1,0 +1,6 @@
+{
+  "source": "https://stats.oarc.ucla.edu/stat/stata/dae/tobit.dta",
+  "sha256": "c04af2ebf1a7f793099d663930c8155adda0a906991c141a16c0a00bb33ccc47",
+  "rows": 200,
+  "scope": "UCLA public hypothetical teaching data matching apt/read/math/prog. Original testscr.xlsx workbook byte identity not established."
+}

@@ -37,7 +37,7 @@ library(sandwich)
 library(lmtest)
 
 # Load the dataset
-data <- read.csv("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/HansfordGomez.csv")
+data <- read.csv("HansfordGomez.csv")
 
 # Display variable names
 cat("\n====== Variable Names in Dataset ======\n")
@@ -144,7 +144,7 @@ library(sandwich)
 library(readxl)
 
 # Load the dataset
-ang_data <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/ang_ev_1980.xlsx")
+ang_data <- read_excel("ang_ev_1980.xlsx")
 
 # ==========================
 # (a) Two-Stage Least Squares (2SLS) Regression
