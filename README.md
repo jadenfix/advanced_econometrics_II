@@ -46,3 +46,14 @@ blp_model <- estimateBLP(
   data = automobile_data
 )
 ```
+
+## Executable public-input research lane
+
+```bash
+# R with the survival package is sufficient; public CSV inputs are committed.
+Rscript run_public_research.R
+```
+
+Runs actual Wooldridge wage/sports regressions, a 1000-resample education-coefficient bootstrap, Gaussian censored likelihood on UCLA's public hypothetical teaching dataset, and numerical checks of the original three-bidder F(v)=v² auction equilibrium. CSV coefficients and a four-panel plot are written to public-research-output. The sports data reproduce the archived rounded LPM intercept and spread10 logit probability. Source/package versions/hashes and attribution are recorded in data/provenance.json. Original XLSX binary identity is not established; wage/UCLA data are transparently documented public counterparts. No mock model results or private-study data are invented.
+
+The original auction block already defines bid_grid and F_est; the prior static 'undefined object' warning was incorrect. Missing auction1/auction2.xlsx, cars, camping, earnings, election and Angrist/Evans workbooks still govern their original empirical lanes. The new auction simulation validates the stated analytical problem, not those missing workbooks. Gaussian Tobit is fit through survival (the likelihood backend used by AER); original numeric-prog and a separately labeled categorical-prog specification are both exported. Neither runtime completion nor public-dataset recovery establishes causal validity or heldout forecast performance.

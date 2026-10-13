@@ -1,0 +1,32 @@
+{
+  "scope": "Public underlying teaching inputs, not byte-identity reproduction of missing course XLSX files.",
+  "wooldridge_package_version": "1.4-7",
+  "license": "wooldridge package GPL-3; dataset attribution retained",
+  "public_sources": [
+    "https://cran.r-project.org/package=wooldridge",
+    "https://stats.oarc.ucla.edu/r/dae/tobit-models/"
+  ],
+  "datasets": [
+    {
+      "file": "wooldridge_pntsprd.csv",
+      "rows": 553,
+      "origin": "Scott Resnick newspaper records for1994-95 men college basketball; Wooldridge text distribution",
+      "match_evidence": "LPM intercept0.57694925 and logit spread10 probability0.8265117 reproduce archived rounded outputs. XLSX binaryidentity not established.",
+      "sha256": "db932cb5febf475d68f27559c366ef4c514045736a0658b0f2cad53d6d1c4923"
+    },
+    {
+      "file": "wooldridge_wage1.csv",
+      "rows": 526,
+      "origin": "1976 CurrentPopulationSurvey from HenryFarber; public Wooldridge teaching data",
+      "match_evidence": "Matches requested wage/educ/exper schema; original workbook recordidentity not established.",
+      "sha256": "41b9dba42e550ab35c27e2be5bcc2d3b90c81a75f03cfd170d374a99a2cd658c"
+    },
+    {
+      "file": "ucla_tobit.csv",
+      "rows": 200,
+      "origin": "UCLA public hypothetical pedagogical Tobit data",
+      "match_evidence": "apt/read/math/prog and17 upper-censored cases match archived description; XLSX binaryidentity not established.",
+      "sha256": "ab2dccbfe567af17093c4108c228aa4ba94b10231231f4dc46f1ea2c8a5dca69"
+    }
+  ]
+}
