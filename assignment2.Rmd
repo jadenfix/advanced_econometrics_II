@@ -117,7 +117,7 @@ A.)
 ```{r}
 library(readxl)
 library(boot)
-wage_data <- readxl::read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/wage.xlsx")
+wage_data <- readxl::read_excel("wage.xlsx")
 model <- lm(wage ~ educ + exper, data = wage_data)
 summary(model)
 ```

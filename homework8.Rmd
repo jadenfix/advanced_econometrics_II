@@ -18,9 +18,9 @@ library(ggplot2)
 library(tidyverse)
 library(car)
 ##########
-cars <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/cars.xlsx")
-auction1 <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/auction1.xlsx")
-auction2 <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/auction2.xlsx")
+cars <- read_excel("cars.xlsx")
+auction1 <- read_excel("auction1.xlsx")
+auction2 <- read_excel("auction2.xlsx")
 ```
 
 A.)

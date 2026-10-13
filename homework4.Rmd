@@ -20,7 +20,7 @@ library(AER)  # For Tobit regression
 library(readxl)
 
 # Load Data
-testscr <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/testscr.xlsx")
+testscr <- read_excel("testscr.xlsx")
 
 # OLS Regression
 ols_model <- lm(apt ~ read + math + prog, data = testscr)
@@ -49,7 +49,7 @@ Why is Tobit More Reliable?
 library(sampleSelection)
 
 # Load Data
-earndata <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/earndata.xlsx")
+earndata <- read_excel("earndata.xlsx")
 
 # (a) OLS Regression
 ols_model <- lm(wearnl ~ educ + age, data = earndata)
@@ -84,7 +84,7 @@ What Does This Mean?
 library(readxl)
 
 # Load Data
-pntspread <- read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/pntspread.xlsx")
+pntspread <- read_excel("pntspread.xlsx")
 
 # (a) Linear Probability Model (LPM)
 lpm_model <- lm(favwin ~ spread, data = pntspread)

@@ -21,7 +21,7 @@ library(tidyr)
 
 A
 ```{r,echo=FALSE}
-camp = read_excel("/Users/jadenfix/Desktop/Graduate School Materials/Advanced Econometrics 2/campingdemand.xlsx")
+camp = read_excel("campingdemand.xlsx")
 
 camp$visit = as.numeric(camp$visit)
 
